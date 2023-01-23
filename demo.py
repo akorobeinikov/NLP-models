@@ -47,7 +47,7 @@ def main():
     args = build_argparser().parse_args()
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(MODEL_TO_URL[args.model])
-    model = transformers.AutoModelForCausalLM.from_pretrained(MODEL_TO_URL[args.model], revision="float16", low_cpu_mem_usage=True)
+    model = transformers.AutoModelForCausalLM.from_pretrained(MODEL_TO_URL[args.model], torch_dtype=torch.float32)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
