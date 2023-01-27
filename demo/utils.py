@@ -56,11 +56,16 @@ def stop_criteria(input_ids, max_length, eos_token_id):
 
 
 MODELS_RELATIVES_PATHS = {
-    "GPT-J_onnx": "models/GPT-J/model_files/onnx/gpt-j.onnx",
-    "GPT-J_openvino": "models/GPT-J/model_files/IR/gpt-j.xml"
+    "GPT-J_onnx": "../models/GPT-J/model_files/onnx/gpt-j.onnx",
+    "GPT-J_openvino": "../models/GPT-J/model_files/IR/gpt-j.xml",
+    "GPT-2_onnx": "../models/GPT-2/model_files/onnx/gpt-2.onnx",
+    "GPT-2_openvino": "../models/GPT-2/model_files/IR/gpt-2.xml",
 }
 
 
 def get_model_path(model_name: str, launcher_type: str):
     full_path = model_name + "_" + launcher_type
-    return MODELS_RELATIVES_PATHS[full_path]
+    if full_path in MODELS_RELATIVES_PATHS:
+        return MODELS_RELATIVES_PATHS[full_path]
+    else:
+        raise ValueError("There is no model in this framework")

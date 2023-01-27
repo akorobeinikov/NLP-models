@@ -14,6 +14,7 @@ from provider import ClassProvider
 from utils import get_model_path
 
 MODEL_TO_URL = {
+    "GPT-2": "gpt2",
     "GPT-J": "EleutherAI/gpt-j-6B",
     "GPT-NeoX": "EleutherAI/gpt-neox-20b",
     "BLOOM": "bigscience/bloom",
@@ -41,7 +42,7 @@ class BaseLauncher(ClassProvider):
 
 
 class PyTorchLauncher(BaseLauncher):
-    __provider__ = "PyTorch"
+    __provider__ = "pytorch"
     def __init__(self, model_name: str) -> None:
         log.info('PyTorch Runtime')
         self.model = transformers.AutoModelForCausalLM.from_pretrained(MODEL_TO_URL[model_name], torch_dtype=torch.float32)
@@ -50,7 +51,7 @@ class PyTorchLauncher(BaseLauncher):
 
     def process(self, input_ids: np.array) -> Any:
         generated_ids = self.model(torch.from_numpy(input_ids))
-        return generated_ids.logits
+        return generated_ids.logits.detach().numpy()
 
 
 class ONNXLauncher(BaseLauncher):

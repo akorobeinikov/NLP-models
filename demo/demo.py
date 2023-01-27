@@ -7,16 +7,16 @@ from argparse import ArgumentParser
 import  numpy as np
 import sys
 import torch
-from torchsummary import summary
 from time import perf_counter
 import onnx
 
 from launchers import create_launcher, MODEL_TO_URL
 from utils import (get_top_k_logits, get_top_p_logits, softmax, stop_criteria, process_logits)
 
-log.basicConfig(format='[ %(levelname)s ] %(message)s', level=log.DEBUG, stream=sys.stdout)
+log.basicConfig(format='[ %(levelname)s ] %(message)s', level=log.INFO, stream=sys.stdout)
 
 MODELS = [
+    "GPT-2",
     "GPT-J",
     "GPT-NeoX",
     "BLOOM",
@@ -24,7 +24,7 @@ MODELS = [
 ]
 
 LAUNCHERS = [
-    "PyTorch",
+    "pytorch",
     "onnx",
     "openvino"
 ]
@@ -51,22 +51,6 @@ def build_argparser():
     options.add_argument("----max_sample_token_num", help="Optional. Maximum number of tokens in generated sample",
                          default=30, required=False, type=int)
     return parser
-
-
-@torch.no_grad()
-def convert_to_onnx(model, input_shapes, output_file):
-    """Convert PyTorch model to ONNX and check the resulting onnx model"""
-
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    model.eval()
-    dummy_inputs = tuple(
-        torch.zeros(input_shape, dtype=torch.float32)
-        for input_shape in input_shapes)
-    model(*dummy_inputs)
-    torch.onnx.export(model, dummy_inputs, str(output_file), verbose=False, input_names=["input"], output_names=["output"],
-                      dynamic_axes={"input": {0: "batch_size", 1: "sequence_len"},"output": {0: "batch_size", 1: "sequence_len"}})
-
-    model = onnx.load(str(output_file))
 
 
 def create_tokenier_launcher(model_name: str, laucnher_name: str):
