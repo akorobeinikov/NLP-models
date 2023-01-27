@@ -60,6 +60,8 @@ MODELS_RELATIVES_PATHS = {
     "GPT-J_openvino": "../models/GPT-J/model_files/IR/gpt-j.xml",
     "GPT-2_onnx": "../models/GPT-2/model_files/onnx/gpt-2.onnx",
     "GPT-2_openvino": "../models/GPT-2/model_files/IR/gpt-2.xml",
+    "GPT-NeoX_onnx": "../models/GPT-NeoX/model_files/onnx/gpt-neox.onnx",
+    "GPT-NeoX_openvino": "../models/GPT-NeoX/model_files/IR/gpt-neox.xml",
 }
 
 

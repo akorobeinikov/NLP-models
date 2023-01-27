@@ -38,7 +38,7 @@ def build_argparser():
                          help='Optional. An text input to process. If is not specified, use interactive mode')
     options.add_argument('-m', '--model', required=False, choices=MODELS, default="GPT-J",
                          help=f"Optional. Name of using model. Available names = {MODELS}. Default is 'GPT-J'")
-    options.add_argument('-l', '--launcher', required=False, choices=LAUNCHERS, default="PyTorch",
+    options.add_argument('-l', '--launcher', required=False, choices=LAUNCHERS, default="pytorch",
                          help="Optional. Name of using backend for runtime. Available backends = {LAUNCHERS}. Default is 'PyTorch'")
     options.add_argument('-o', '--output',
                          help='Optional. Name of the output file(s) to save.')
