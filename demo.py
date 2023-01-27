@@ -4,12 +4,15 @@
 import logging as log
 import transformers
 from argparse import ArgumentParser
+import  numpy as np
 import sys
 import torch
 from torchsummary import summary
 from time import perf_counter
 import onnx
+
 from launchers import create_launcher, MODEL_TO_URL
+from utils import (get_top_k_logits, get_top_p_logits, softmax, stop_criteria, process_logits)
 
 log.basicConfig(format='[ %(levelname)s ] %(message)s', level=log.DEBUG, stream=sys.stdout)
 
@@ -39,6 +42,14 @@ def build_argparser():
                          help="Optional. Name of using backend for runtime. Available backends = {LAUNCHERS}. Default is 'PyTorch'")
     options.add_argument('-o', '--output',
                          help='Optional. Name of the output file(s) to save.')
+    options.add_argument("--top_k", help="Optional. Number of tokens with the highest probability "
+                                      "which will be kept for generation",
+                        default=5, required=False, type=int)
+    options.add_argument("--top_p", help="Optional. Maximum probability, tokens with such a probability "
+                                      "and lower will be kept for generation",
+                        default=0.8, required=False, type=float)
+    options.add_argument("----max_sample_token_num", help="Optional. Maximum number of tokens in generated sample",
+                         default=30, required=False, type=int)
     return parser
 
 
@@ -68,121 +79,65 @@ def create_tokenier_launcher(model_name: str, laucnher_name: str):
 
     return tokenizer, launcher
 
-def generate_text(input, tokenizer, launcher, device="cpu"):
-    start_time = perf_counter()
-    # Get input_ids using tokenizer
-    input_ids = tokenizer(input, return_tensors="np").input_ids
+def generate_text(tokenizer, launcher, args):
+    for prompt in prompts(args.input):
+        if not prompt.strip():
+            break
+        # Get input_ids using tokenizer
+        input_ids = tokenizer(prompt, return_tensors="np").input_ids
+        eos_token_id = 50256
 
-    generated_ids = launcher.process(input_ids)
-    print(generated_ids.shape)
-    # generated_text = tokenizer.decode(generated_ids[0])
-    infer_time = perf_counter() - start_time
+        cur_input_len = input_ids.shape[-1]
+        # maximum number of tokens that will be generated
+        max_sample_token_num = args.max_sample_token_num + cur_input_len
 
-    return (generated_ids.shape, infer_time)
+        # Generating process
+        t0 = perf_counter()
+        t_count = 0
+        while True:
+            model_input = input_ids
+            # infer by laucnher
+            outputs = launcher.process(model_input)
+            t_count += 1
+            next_token_logits = outputs[:, cur_input_len-1, :]
+            # pre-process distribution
+            next_token_scores = process_logits(input_ids, next_token_logits, eos_token_id)
+            if args.top_k > 0:
+                next_token_scores = get_top_k_logits(next_token_scores, args.top_k)
+            if args.top_p < 1.0:
+                next_token_scores = get_top_p_logits(next_token_scores, args.top_p)
+            # get next token id
+            probs = softmax(next_token_scores)
+            next_tokens = np.random.choice(probs.shape[-1], 1, p=probs[0], replace=True)
+            # update info for the next step
+            input_ids = np.concatenate((input_ids, [next_tokens]), axis=-1)
+            cur_input_len = input_ids.shape[-1]
+            if stop_criteria(input_ids, min(max_sample_token_num, 1024), eos_token_id):
+                break
+
+        text = tokenizer.decode(input_ids[0])
+        infer_time = perf_counter() - t0
+        log.info("{} requests were processed in {:0.2f}sec ({:0.2}sec per request)".format(
+                 t_count, infer_time, infer_time / t_count))
+
+        # print result
+        log.info("GENERATED SEQUENCE: {}".format(text))
 
 
-def interactive_mode(tokenizer, model, device="cpu"):
-    user_input = input("Please enter new input: ")
-    all_time = 0
-    count_inputs = 0
-    while(user_input!="exit"):
-        model_answer, time = generate_text(user_input, tokenizer, model, device)
-        all_time += time
-        count_inputs += 1
-        print(f"Answer:  {model_answer}")
-        user_input = input("Please enter new input: ")
-
-    infer_time = all_time / count_inputs
-    log.info("Average infer time = {:.3f} seconds".format(infer_time))
-    return
-
-
-# def gpt2_code():
-#      # loop on user's or prepared prompts
-#     for prompt in prompts():
-#         if not prompt.strip():
-#             break
-
-#         # encode input
-#         tokens = tokenizer.encode_batch([prompt])[0].ids
-#         input_ids = np.array([tokens], dtype=np.int32)
-
-#         # maximum number of tokens that can be processed by network at once
-#         max_length = args.max_seq_len
-
-#         eos_token_id = len(vocab) - 1
-
-#         cur_input_len = input_ids.shape[-1]
-
-#         # maximum number of tokens that will be generated
-#         max_sample_token_num = args.max_sample_token_num + cur_input_len
-
-#         t0 = time.perf_counter()
-#         t_count = 0
-
-#         while True:
-#             model_input = input_ids
-#             if not args.dynamic_shape:
-#                 # pad the rest of the request
-#                 pad_len = max_length - cur_input_len
-#                 model_input = np.concatenate((input_ids, [[eos_token_id] * pad_len]), axis=-1)
-
-#             # create numpy inputs for OpenVINO runtime
-#             inputs = {
-#                 input_tensor: model_input,
-#             }
-
-#             # infer by OpenVINO runtime
-#             t_start = time.perf_counter()
-#             outputs = infer_request.infer(inputs)[output_tensor]
-#             t_end = time.perf_counter()
-#             t_count += 1
-#             log.info("Sequence of length {} is processed with {:0.2f} requests/sec ({:0.2} sec per request)".format(
-#                 model_input.shape[1], 1 / (t_end - t_start), t_end - t_start))
-
-#             next_token_logits = outputs[:, cur_input_len-1, :]
-
-#             # pre-process distribution
-#             next_token_scores = process_logits(input_ids, next_token_logits, eos_token_id)
-#             if args.top_k > 0:
-#                 next_token_scores = get_top_k_logits(next_token_scores, args.top_k)
-
-#             if args.top_p < 1.0:
-#                 next_token_scores = get_top_p_logits(next_token_scores, args.top_p)
-
-#             # get next token id
-#             probs = softmax(next_token_scores)
-#             next_tokens = np.random.choice(probs.shape[-1], 1, p=probs[0], replace=True)
-
-#             # update info for the next step
-#             input_ids = np.concatenate((input_ids, [next_tokens]), axis=-1)
-
-#             cur_input_len = input_ids.shape[-1]
-
-#             if stop_criteria(input_ids, min(max_length, max_sample_token_num), eos_token_id):
-#                 break
-
-#         t1 = time.perf_counter()
-
-#         text = tokenizer.decode_batch(input_ids)[0]
-
-#         log.info("{} requests were processed in {:0.2f}sec ({:0.2}sec per request)".format(
-#             t_count, t1 - t0, (t1 - t0) / t_count))
-
-#         # print result
-#         log.info("GENERATED SEQUENCE: {}".format(text))
+def prompts(input_text):
+    if input_text:
+        log.info("Input prompt: {}".format(input_text))
+        yield input_text
+    else:
+        while True:
+            yield input('Type input prompt (empty string to exit):')
 
 def main():
     args = build_argparser().parse_args()
 
     tokenizer, launcher = create_tokenier_launcher(args.model, args.launcher)
 
-    if args.input:
-        model_answer, time = generate_text(args.input, tokenizer, launcher)
-        print(f"Answer:  {model_answer}")
-        log.info("Average infer time = {:.3f} seconds".format(time))
-    else:
-        interactive_mode(tokenizer, launcher)
+    generate_text(tokenizer, launcher, args)
 
 
 if __name__ == '__main__':

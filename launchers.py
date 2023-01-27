@@ -75,9 +75,9 @@ class OpenVINOLaucnher(BaseLauncher):
         self.model.reshape({self.input_tensor: PartialShape([Dimension(1), Dimension(0, 1024)])})
 
         # load model to the device
-        self.compiled_model = core.compile_model(self.model, "cpu")
+        self.compiled_model = core.compile_model(self.model, "CPU")
         self.output_tensor = self.compiled_model.outputs[0]
-        infer_request = self.compiled_model.create_infer_request()
+        self.infer_request = self.compiled_model.create_infer_request()
 
     def process(self, input_ids: np.array) -> Any:
         inputs = {
