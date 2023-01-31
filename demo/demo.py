@@ -47,16 +47,18 @@ def build_argparser():
                         default=5, required=False, type=int)
     options.add_argument("--top_p", help="Optional. Maximum probability, tokens with such a probability "
                                       "and lower will be kept for generation",
-                        default=0.8, required=False, type=float)
-    options.add_argument("----max_sample_token_num", help="Optional. Maximum number of tokens in generated sample",
-                         default=30, required=False, type=int)
+                        default=0.7, required=False, type=float)
+    options.add_argument("--max_sample_token_num", help="Optional. Maximum number of tokens in generated sample",
+                         default=40, required=False, type=int)
+    options.add_argument('--dynamic_shape', action='store_true', help='Run model with dynamic input sequence. If not provided, input sequence will be padded to max_seq_len')
+    options.add_argument('--max_seq_len', type=int, required=False, default=128, help='Optional. Maximum sequence length for processing. Default value is 128')
     return parser
 
 
-def create_tokenier_launcher(model_name: str, laucnher_name: str):
+def create_tokenier_launcher(model_name: str, laucnher_name: str, config):
     start_time = perf_counter()
     tokenizer = transformers.AutoTokenizer.from_pretrained(MODEL_TO_URL[model_name])
-    launcher = create_launcher(laucnher_name, model_name)
+    launcher = create_launcher(laucnher_name, model_name, config)
     load_time = perf_counter() - start_time
 
     log.info("Load time = {:.3f} seconds".format(load_time))
@@ -75,13 +77,24 @@ def generate_text(tokenizer, launcher, args):
         # maximum number of tokens that will be generated
         max_sample_token_num = args.max_sample_token_num + cur_input_len
 
+        # maximum number of tokens that can be processed by network at once
+        max_length = args.max_seq_len
+
         # Generating process
         t0 = perf_counter()
         t_count = 0
+        infer_time = []
         while True:
             model_input = input_ids
             # infer by laucnher
+            start_infer = perf_counter()
+            if not args.dynamic_shape and args.launcher == "openvino":
+                # pad the rest of the request
+                pad_len = max_length - cur_input_len
+                model_input = np.concatenate((input_ids, [[eos_token_id] * pad_len]), axis=-1)
             outputs = launcher.process(model_input)
+            finish_infer = perf_counter()
+            infer_time.append(finish_infer - start_infer)
             t_count += 1
             next_token_logits = outputs[:, cur_input_len-1, :]
             # pre-process distribution
@@ -100,9 +113,9 @@ def generate_text(tokenizer, launcher, args):
                 break
 
         text = tokenizer.decode(input_ids[0])
-        infer_time = perf_counter() - t0
-        log.info("{} requests were processed in {:0.2f}sec ({:0.2}sec per request)".format(
-                 t_count, infer_time, infer_time / t_count))
+        all_time = perf_counter() - t0
+        log.info("{} requests were processed in {:0.2f}sec ({:0.2}sec per request, {:0.2}sec per infer)".format(
+                 t_count, all_time, all_time / t_count, np.mean(infer_time)))
 
         # print result
         log.info("GENERATED SEQUENCE: {}".format(text))
@@ -119,7 +132,7 @@ def prompts(input_text):
 def main():
     args = build_argparser().parse_args()
 
-    tokenizer, launcher = create_tokenier_launcher(args.model, args.launcher)
+    tokenizer, launcher = create_tokenier_launcher(args.model, args.launcher, config=args)
 
     generate_text(tokenizer, launcher, args)
 
