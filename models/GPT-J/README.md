@@ -18,15 +18,6 @@ More details provided in the [paper](https://cdn.openai.com/better-language-mode
 | Vocab size        | 50400            |
 | Source framework  | PyTorch\*        |
 
-
-## Accuracy
-
-[Perplexity](https://en.wikipedia.org/wiki/Perplexity) obtained on [WikiText-2 raw character level data](https://blog.einstein.ai/the-wikitext-long-term-dependency-language-modeling-dataset/) dataset for converted model.
-
-| Metric     | Value  |
-| ---------- | ------ |
-| Perplexity | 29.00% |
-
 ## Input
 
 ### Original model
@@ -64,10 +55,13 @@ Prediction scores of language modeling head, name: `output`, dynamic shape `B, L
 
 ## Demo usage
 
-TODO
+To run demo with GPT-J, use the next command line:
+
+```
+  python3 demo.py -m GPT-J -l <launcher_name>
+```
 
 ## Legal Information
 
 The original model is distributed under the
 [Apache License, Version 2.0](https://raw.githubusercontent.com/huggingface/transformers/master/LICENSE).
-A copy of the license is provided in `<omz_dir>/models/public/licenses/APACHE-2.0.txt`.
